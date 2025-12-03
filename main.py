@@ -1,14 +1,15 @@
-# ==========================================
 # main.py
+# -----------------------------------------
 # Punto de entrada de la aplicación:
-# - configura la ventana
-# - muestra login, luego home y vistas
-# ==========================================
+# - configura la ventana principal
+# - muestra login, luego la vista Inicio
+# - navegación entre Productos, Almacenes, Usuarios
+# -----------------------------------------
 
 import customtkinter as ctk
 from tkinter import messagebox
 
-from settings import COLOR_AZUL, ROL_ADMIN
+from settings import COLOR_AZUL, COLOR_FONDO, ROL_ADMIN
 from db_utils import ensure_schema_and_seed_users
 from ui_widgets import NavBar, load_logo
 from views_login import LoginView
@@ -20,7 +21,7 @@ from views_usuarios import UsuariosView
 class HomeView(ctk.CTkFrame):
     """Vista de inicio (bienvenida) después del login."""
 
-    def __init__(self, parent, usuario: str, rol: str):
+    def __init__(self, parent, usuario, rol):
         super().__init__(parent, fg_color="white")
         self.usuario = usuario
         self.rol = rol
@@ -44,15 +45,24 @@ class HomeView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             wrapper,
-            text=f"Bienvenido/a, {usuario} (rol: {rol})",
-            font=("Segoe UI", 13),
-            text_color="#444", fg_color="white"
+            text="Universidad de Sonora",
+            font=("Segoe UI", 14),
+            text_color="#374151",
+            fg_color="white"
         ).pack(pady=(0, 8))
 
         ctk.CTkLabel(
             wrapper,
-            text="Usa la barra superior para navegar entre Inicio, Productos, Almacenes "
-                 "y Usuarios (solo si eres ADMIN).",
+            text=f"Bienvenido/a, {usuario} (rol: {rol})",
+            font=("Segoe UI", 13),
+            text_color="#444",
+            fg_color="white"
+        ).pack(pady=(0, 8))
+
+        ctk.CTkLabel(
+            wrapper,
+            text="Usa la barra superior para navegar entre Inicio, Productos, "
+                 "Almacenes y Usuarios (solo ADMIN).",
             font=("Segoe UI", 11),
             text_color="#666",
             fg_color="white",
@@ -71,6 +81,7 @@ class App(ctk.CTk):
         self.title("Inventario - Universidad de Sonora")
         self.geometry("1080x650")
         self.minsize(960, 600)
+        self.configure(fg_color=COLOR_FONDO)
 
         self.usuario = ""
         self.rol = ""
@@ -83,7 +94,6 @@ class App(ctk.CTk):
 
         self.current_navbar = None
 
-        # Al iniciar, vamos a login
         self.show_login()
 
     def clear_container(self):
@@ -101,56 +111,56 @@ class App(ctk.CTk):
         self.clear_container()
         LoginView(self.container, on_ok=self.on_login).pack(fill="both", expand=True)
 
-    def on_login(self, usuario: str, rol: str):
-        """Callback cuando el login es correcto."""
+    def on_login(self, usuario, rol):
+        """Callback cuando el login fue correcto."""
         self.usuario = usuario
         self.rol = (rol or "").upper()
 
-        # Creamos navbar
         self.clear_navbar()
         self.current_navbar = NavBar(
             self.navbar_frame,
+            rol=self.rol,
             on_home=self.show_home,
             on_prod=self.show_productos,
             on_alm=self.show_almacenes,
             on_users=self.show_usuarios,
             on_logout=self.logout,
-            rol=self.rol
         )
         self.current_navbar.pack(fill="x")
 
-        # Mostramos home
         self.show_home()
+
+    def logout(self):
+        """Cierra sesión y regresa al login."""
+        if messagebox.askyesno("Cerrar sesión", "¿Seguro que quieres cerrar sesión?"):
+            self.usuario = ""
+            self.rol = ""
+            self.show_login()
 
     def show_home(self):
         self.clear_container()
-        HomeView(self.container, usuario=self.usuario, rol=self.rol).pack(fill="both", expand=True)
+        HomeView(self.container, self.usuario, self.rol).pack(fill="both", expand=True)
 
     def show_productos(self):
         self.clear_container()
-        ProductosView(self.container, usuario=self.usuario, rol=self.rol).pack(fill="both", expand=True)
+        ProductosView(self.container, self.usuario, self.rol).pack(fill="both", expand=True)
 
     def show_almacenes(self):
         self.clear_container()
-        AlmacenesView(self.container, usuario=self.usuario, rol=self.rol).pack(fill="both", expand=True)
+        AlmacenesView(self.container, self.usuario, self.rol).pack(fill="both", expand=True)
 
     def show_usuarios(self):
         if self.rol != ROL_ADMIN:
-            messagebox.showwarning("Acceso", "Solo ADMIN puede gestionar usuarios.")
+            messagebox.showwarning("Permisos", "Solo el ADMIN puede acceder a Usuarios.")
             return
         self.clear_container()
-        UsuariosView(self.container).pack(fill="both", expand=True)
-
-    def logout(self):
-        """Cerrar sesión y volver a login."""
-        self.usuario = ""
-        self.rol = ""
-        self.show_login()
+        UsuariosView(self.container, self.usuario, self.rol).pack(fill="both", expand=True)
 
 
 def main():
-    """Punto de entrada del programa."""
+    # Asegurar que el esquema de la BD esté listo (tabla usuarios + auditoría)
     ensure_schema_and_seed_users()
+
     app = App()
     app.mainloop()
 

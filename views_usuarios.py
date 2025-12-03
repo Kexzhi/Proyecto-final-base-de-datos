@@ -1,286 +1,281 @@
-# ==========================================
 # views_usuarios.py
-# Vista para ADMIN:
-# - ver usuarios
-# - cambiar rol
-# - cambiar contraseña
-# ==========================================
-
-import tkinter as tk
-from tkinter import ttk, messagebox
 import customtkinter as ctk
-import hashlib, secrets
+from tkinter import ttk, messagebox
 
 from settings import (
-    BTN_RADIUS, FONT_UI,
-    COLOR_DORADO, COLOR_DORADO_OSCURO,
-    ROL_ADMIN, ROL_PROD, ROL_ALM, ROL_VISIT
+    COLOR_AZUL,
+    COLOR_DORADO,
+    FONT_UI,
+    ROL_ADMIN,
+    ROL_PROD,
+    ROL_ALM,
+    ROL_VIS,
 )
-from db_utils import db, table_exists
-from ui_widgets import safe_table_or_msg
-
-ROLES_PERMITIDOS = (ROL_ADMIN, ROL_PROD, ROL_ALM, ROL_VISIT)
+from db_utils import list_users, create_user, update_user, delete_user
 
 
-def _username_col(conn):
-    """Detecta si la columna de nombre de usuario se llama 'nombre' o 'usuario'."""
-    try:
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(usuarios)")]
-    except Exception:
-        cols = []
-    if "nombre" in cols:
-        return "nombre"
-    if "usuario" in cols:
-        return "usuario"
-    return "nombre"
-
-
-def _pack_password_sha256(plain: str) -> str:
-    """Cifra contraseña en formato 'sha256$salt$hash'."""
-    salt = secrets.token_hex(16)
-    h = hashlib.sha256((salt + plain).encode("utf-8")).hexdigest()
-    return f"sha256${salt}${h}"
+ROLES_PERMITIDOS = (ROL_ADMIN, ROL_PROD, ROL_ALM, ROL_VIS)
 
 
 class UsuariosView(ctk.CTkFrame):
-    """Vista de administración de usuarios. Solo para ADMIN."""
+    """
+    Vista de USUARIOS.
 
-    def __init__(self, parent):
+    - Solo el rol ADMIN puede crear/editar/eliminar.
+    - Editor inline (sin ventana emergente).
+    """
+
+    def __init__(self, parent, usuario: str, rol: str):
         super().__init__(parent, fg_color="white")
-        self.editor_frame = None
+        self.usuario = usuario
+        self.rol = rol
+        self._selected_id: int | None = None
 
-        with db() as conn:
-            existe = table_exists(conn, "usuarios")
-        if not safe_table_or_msg(self, existe, "usuarios"):
-            return
+        self.puede_editar = self.rol == ROL_ADMIN
+
+        self._build_layout()
+        self._load_data()
+
+    def _build_layout(self) -> None:
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=0)
+
+        # Tabla
+        table_frame = ctk.CTkFrame(self, fg_color="white")
+        table_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        table_frame.rowconfigure(0, weight=1)
+        table_frame.columnconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(
+            table_frame,
+            columns=("id", "nombre", "rol", "ultimo_inicio"),
+            show="headings",
+            height=12,
+        )
+        self.tree.heading("id", text="ID")
+        self.tree.heading("nombre", text="Nombre")
+        self.tree.heading("rol", text="Rol")
+        self.tree.heading("ultimo_inicio", text="Último inicio")
+
+        self.tree.column("id", width=40, anchor="center")
+        self.tree.column("nombre", width=160, anchor="w")
+        self.tree.column("rol", width=110, anchor="center")
+        self.tree.column("ultimo_inicio", width=180, anchor="center")
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        scroll.grid(row=0, column=1, sticky="ns")
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+
+        # Editor
+        editor = ctk.CTkFrame(self, fg_color="#f9f9f9")
+        editor.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+        editor.columnconfigure(1, weight=1)
+        editor.columnconfigure(3, weight=1)
 
         ctk.CTkLabel(
-            self,
-            text="Gestión de Usuarios (solo ADMIN)",
-            font=("Segoe UI", 13, "bold"), fg_color="white",
-            text_color="#333"
-        ).pack(anchor="w", padx=16, pady=(12, 4))
+            editor, text="Editor de usuario", font=("Segoe UI", 13, "bold")
+        ).grid(row=0, column=0, columnspan=4, padx=10, pady=(5, 5), sticky="w")
 
-        # Tabla de usuarios
-        table_frame = ctk.CTkFrame(self, fg_color="white")
-        table_frame.pack(fill="both", expand=True, padx=16, pady=(0, 6))
+        # Nombre
+        ctk.CTkLabel(editor, text="Nombre:", font=FONT_UI).grid(
+            row=1, column=0, padx=10, pady=(5, 0), sticky="e"
+        )
+        self.e_nombre = ctk.CTkEntry(editor, font=FONT_UI)
+        self.e_nombre.grid(row=1, column=1, padx=10, pady=(5, 0), sticky="ew")
 
-        self.cols = ("id", "usuario", "rol", "ultimo_inicio")
-        headings = ("ID", "Usuario", "Rol", "Último inicio")
-        widths = (50, 220, 140, 220)
+        # Password
+        ctk.CTkLabel(editor, text="Contraseña:", font=FONT_UI).grid(
+            row=2, column=0, padx=10, pady=(5, 0), sticky="e"
+        )
+        self.e_password = ctk.CTkEntry(editor, font=FONT_UI, show="*")
+        self.e_password.grid(row=2, column=1, padx=10, pady=(5, 0), sticky="ew")
 
-        self.tree = ttk.Treeview(table_frame, columns=self.cols, show="headings", height=10)
-        for c, h, w in zip(self.cols, headings, widths):
-            self.tree.heading(c, text=h)
-            self.tree.column(c, width=w, anchor="w")
-        vs = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vs.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        vs.pack(side="right", fill="y")
+        # Rol
+        ctk.CTkLabel(editor, text="Rol:", font=FONT_UI).grid(
+            row=1, column=2, padx=10, pady=(5, 0), sticky="e"
+        )
+        self.e_rol = ctk.CTkComboBox(
+            editor,
+            values=list(ROLES_PERMITIDOS),
+            font=FONT_UI,
+            state="readonly",
+            width=130,
+        )
+        self.e_rol.set(ROL_VIS)
+
+        self.e_rol.grid(row=1, column=3, padx=10, pady=(5, 0), sticky="ew")
 
         # Botones
-        actions = ctk.CTkFrame(self, fg_color="white")
-        actions.pack(fill="x", padx=16, pady=(0, 8))
-
-        self.btn_rol = ctk.CTkButton(
-            actions, text="Cambiar rol",
-            corner_radius=BTN_RADIUS,
-            fg_color=COLOR_DORADO, hover_color=COLOR_DORADO_OSCURO,
-            text_color="black", width=140,
-            command=self.start_change_role
+        self.btn_nuevo = ctk.CTkButton(
+            editor,
+            text="Nuevo",
+            fg_color=COLOR_DORADO,
+            hover_color="#e0a600",
+            text_color="black",
+            font=FONT_UI,
+            corner_radius=16,
+            command=self._nuevo,
         )
-        self.btn_rol.pack(side="left", padx=4, pady=4)
-
-        self.btn_pass = ctk.CTkButton(
-            actions, text="Cambiar contraseña",
-            corner_radius=BTN_RADIUS,
-            fg_color=COLOR_DORADO, hover_color=COLOR_DORADO_OSCURO,
-            text_color="black", width=180,
-            command=self.start_change_password
+        self.btn_guardar = ctk.CTkButton(
+            editor,
+            text="Guardar",
+            fg_color=COLOR_AZUL,
+            hover_color="#003b73",
+            text_color="white",
+            font=FONT_UI,
+            corner_radius=16,
+            command=self._guardar,
         )
-        self.btn_pass.pack(side="left", padx=4, pady=4)
+        self.btn_eliminar = ctk.CTkButton(
+            editor,
+            text="Eliminar",
+            fg_color="#d9534f",
+            hover_color="#c9302c",
+            text_color="white",
+            font=FONT_UI,
+            corner_radius=16,
+            command=self._eliminar,
+        )
 
-        ctk.CTkButton(
-            actions, text="Refrescar",
-            corner_radius=BTN_RADIUS,
-            fg_color="#e5e7eb", hover_color="#d1d5db",
-            text_color="#333", width=120,
-            command=self.load_data
-        ).pack(side="left", padx=4, pady=4)
+        self.btn_nuevo.grid(row=3, column=1, padx=5, pady=10, sticky="ew")
+        self.btn_guardar.grid(row=3, column=2, padx=5, pady=10, sticky="ew")
+        self.btn_eliminar.grid(row=3, column=3, padx=5, pady=10, sticky="ew")
 
-        ctk.CTkLabel(
-            self,
-            text="No se pueden crear ni eliminar usuarios aquí; solo modificar rol o contraseña.",
-            font=("Segoe UI", 10), text_color="#666", fg_color="white"
-        ).pack(anchor="w", padx=16, pady=(0, 8))
+        if not self.puede_editar:
+            # Deshabilitamos todo si NO es admin
+            for w in (
+                    self.e_nombre,
+                    self.e_password,
+                    self.e_rol,
+                    self.btn_nuevo,
+                    self.btn_guardar,
+                    self.btn_eliminar,
+            ):
+                w.configure(state="disabled")
 
-        self.load_data()
+    # ---------- Datos ----------
 
-    def _selected(self):
-        """Devuelve dict con datos del usuario seleccionado, o None."""
-        sel = self.tree.selection()
-        if not sel:
-            messagebox.showinfo("Usuarios", "Selecciona un usuario de la tabla.")
-            return None
-        values = self.tree.item(sel[0])["values"]
-        return {"id": values[0], "usuario": values[1], "rol": values[2]}
+    def _load_data(self) -> None:
+        try:
+            rows = list_users()
+        except Exception as e:
+            messagebox.showerror("Error en BD", f"No se pudieron cargar los usuarios:\n{e}")
+            return
 
-    def load_data(self):
-        """Carga la tabla de usuarios desde la DB."""
         for item in self.tree.get_children():
             self.tree.delete(item)
-        with db() as conn:
-            ucol = _username_col(conn)
-            cols = [r[1] for r in conn.execute("PRAGMA table_info(usuarios)")]
-            col_ult = "fecha_hora_ultimo_inicio" if "fecha_hora_ultimo_inicio" in cols else "NULL"
-            sql = f"SELECT id, {ucol} AS usuario, rol, {col_ult} AS ultimo FROM usuarios ORDER BY id"
-            for r in conn.execute(sql):
-                self.tree.insert("", tk.END, values=r)
 
-    def clear_editor(self):
-        """Cierra panel de edición y reactiva botones."""
-        if self.editor_frame is not None:
-            self.editor_frame.destroy()
-            self.editor_frame = None
-        self.btn_rol.configure(state="normal")
-        self.btn_pass.configure(state="normal")
+        for row in rows:
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    row["id"],
+                    row["nombre"],
+                    row["rol"],
+                    row["fecha_hora_ultimo_inicio"] or "",
+                ),
+            )
 
-    # --------- Cambiar rol ---------
-    def start_change_role(self):
-        row = self._selected()
-        if not row:
+        self._selected_id = None
+        self.e_nombre.delete(0, "end")
+        self.e_password.delete(0, "end")
+        self.e_rol.set(ROL_VIS)
+
+    # ---------- Editor ----------
+
+    def _on_tree_select(self, event=None) -> None:
+        sel = self.tree.selection()
+        if not sel:
             return
-        self.show_role_editor(row)
-
-    def show_role_editor(self, row):
-        self.btn_rol.configure(state="disabled")
-        self.btn_pass.configure(state="disabled")
-
-        if self.editor_frame is not None:
-            self.editor_frame.destroy()
-
-        self.editor_frame = ctk.CTkFrame(self, fg_color="#f5f5f5", corner_radius=10)
-        self.editor_frame.pack(fill="x", padx=16, pady=(0, 10))
-
-        ctk.CTkLabel(
-            self.editor_frame,
-            text=f"Cambiar rol — {row['usuario']}",
-            font=("Segoe UI", 12, "bold"), fg_color="#f5f5f5"
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(8, 4))
-
-        ctk.CTkLabel(
-            self.editor_frame, text="Rol:", font=FONT_UI,
-            fg_color="#f5f5f5"
-        ).grid(row=1, column=0, sticky="e", padx=6, pady=6)
-
-        self.opt_rol = ctk.CTkOptionMenu(
-            self.editor_frame, values=list(ROLES_PERMITIDOS),
-            width=220
-        )
-        self.opt_rol.set(row["rol"] or ROL_PROD)
-        self.opt_rol.grid(row=1, column=1, sticky="w", padx=6, pady=6)
-
-        btns = ctk.CTkFrame(self.editor_frame, fg_color="#f5f5f5")
-        btns.grid(row=2, column=0, columnspan=2, sticky="e", padx=10, pady=(8, 10))
-
-        ctk.CTkButton(
-            btns, text="Cancelar", corner_radius=BTN_RADIUS,
-            fg_color="#e5e7eb", hover_color="#d1d5db", text_color="black",
-            command=self.clear_editor
-        ).pack(side="right", padx=4)
-
-        ctk.CTkButton(
-            btns, text="Guardar", corner_radius=BTN_RADIUS,
-            fg_color=COLOR_DORADO, hover_color=COLOR_DORADO_OSCURO,
-            text_color="black",
-            command=lambda: self.save_role(row["id"])
-        ).pack(side="right", padx=4)
-
-    def save_role(self, user_id: int):
-        new_role = self.opt_rol.get()
-        if new_role not in ROLES_PERMITIDOS:
-            messagebox.showerror("Usuarios", "Rol inválido.")
-            return
-        with db() as conn:
-            conn.execute("UPDATE usuarios SET rol=? WHERE id=?", (new_role, user_id))
-            conn.commit()
-        self.clear_editor()
-        self.load_data()
-
-    # --------- Cambiar contraseña ---------
-    def start_change_password(self):
-        row = self._selected()
-        if not row:
-            return
-        self.show_password_editor(row)
-
-    def show_password_editor(self, row):
-        self.btn_rol.configure(state="disabled")
-        self.btn_pass.configure(state="disabled")
-
-        if self.editor_frame is not None:
-            self.editor_frame.destroy()
-
-        self.editor_frame = ctk.CTkFrame(self, fg_color="#f5f5f5", corner_radius=10)
-        self.editor_frame.pack(fill="x", padx=16, pady=(0, 10))
-
-        ctk.CTkLabel(
-            self.editor_frame,
-            text=f"Cambiar contraseña — {row['usuario']}",
-            font=("Segoe UI", 12, "bold"), fg_color="#f5f5f5"
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(8, 4))
-
-        ctk.CTkLabel(
-            self.editor_frame, text="Nueva contraseña:",
-            font=FONT_UI, fg_color="#f5f5f5"
-        ).grid(row=1, column=0, sticky="e", padx=6, pady=6)
-        self.e_pass1 = ctk.CTkEntry(
-            self.editor_frame, height=32, corner_radius=BTN_RADIUS,
-            show="•", width=260, font=FONT_UI
-        )
-        self.e_pass1.grid(row=1, column=1, sticky="w", padx=6, pady=6)
-
-        ctk.CTkLabel(
-            self.editor_frame, text="Repetir contraseña:",
-            font=FONT_UI, fg_color="#f5f5f5"
-        ).grid(row=2, column=0, sticky="e", padx=6, pady=6)
-        self.e_pass2 = ctk.CTkEntry(
-            self.editor_frame, height=32, corner_radius=BTN_RADIUS,
-            show="•", width=260, font=FONT_UI
-        )
-        self.e_pass2.grid(row=2, column=1, sticky="w", padx=6, pady=6)
-
-        btns = ctk.CTkFrame(self.editor_frame, fg_color="#f5f5f5")
-        btns.grid(row=3, column=0, columnspan=2, sticky="e", padx=10, pady=(8, 10))
-
-        ctk.CTkButton(
-            btns, text="Cancelar", corner_radius=BTN_RADIUS,
-            fg_color="#e5e7eb", hover_color="#d1d5db", text_color="black",
-            command=self.clear_editor
-        ).pack(side="right", padx=4)
-
-        ctk.CTkButton(
-            btns, text="Guardar", corner_radius=BTN_RADIUS,
-            fg_color=COLOR_DORADO, hover_color=COLOR_DORADO_OSCURO,
-            text_color="black",
-            command=lambda: self.save_password(row["id"])
-        ).pack(side="right", padx=4)
-
-    def save_password(self, user_id: int):
-        p1 = self.e_pass1.get().strip()
-        p2 = self.e_pass2.get().strip()
-        if not p1:
-            messagebox.showwarning("Usuarios", "Ingresa una contraseña.")
-            return
-        if p1 != p2:
-            messagebox.showwarning("Usuarios", "Las contraseñas no coinciden.")
+        vals = self.tree.item(sel[0], "values")
+        if not vals:
             return
 
-        packed = _pack_password_sha256(p1)
-        with db() as conn:
-            conn.execute("UPDATE usuarios SET password=? WHERE id=?", (packed, user_id))
-            conn.commit()
+        self._selected_id = int(vals[0])
+        nombre = vals[1]
+        rol = vals[2]
 
-        messagebox.showinfo("Usuarios", "Contraseña actualizada.")
-        self.clear_editor()
-        self.load_data()
+        self.e_nombre.configure(state="normal")
+        self.e_password.configure(state="normal")
+        self.e_rol.configure(state="readonly")
+
+        self.e_nombre.delete(0, "end")
+        self.e_nombre.insert(0, nombre)
+        self.e_password.delete(0, "end")  # no mostramos el hash, se deja en blanco
+        if rol in ROLES_PERMITIDOS:
+            self.e_rol.set(rol)
+        else:
+            self.e_rol.set(ROL_VIS)
+
+    def _nuevo(self) -> None:
+        self._selected_id = None
+        self.e_nombre.configure(state="normal")
+        self.e_password.configure(state="normal")
+        self.e_rol.configure(state="readonly")
+
+        self.e_nombre.delete(0, "end")
+        self.e_password.delete(0, "end")
+        self.e_rol.set(ROL_VIS)
+        self.e_nombre.focus()
+
+    def _guardar(self) -> None:
+        if not self.puede_editar:
+            return
+
+        nombre = self.e_nombre.get().strip()
+        pw = self.e_password.get().strip()
+        rol = self.e_rol.get().strip()
+
+        if not nombre:
+            messagebox.showwarning("Validación", "El nombre es obligatorio.")
+            return
+        if rol not in ROLES_PERMITIDOS:
+            messagebox.showwarning("Validación", "Selecciona un rol válido.")
+            return
+
+        try:
+            if self._selected_id is None:
+                if not pw:
+                    messagebox.showwarning(
+                        "Validación",
+                        "Para crear un usuario nuevo se requiere contraseña.",
+                    )
+                    return
+                create_user(nombre, pw, rol)
+            else:
+                # Si la contraseña está vacía, mantenemos la actual
+                pw_final = pw or None
+                update_user(self._selected_id, nombre, pw_final, rol)
+        except Exception as e:
+            messagebox.showerror("Error en BD", f"No se pudo guardar el usuario:\n{e}")
+            return
+
+        self._load_data()
+
+    def _eliminar(self) -> None:
+        if not self.puede_editar:
+            return
+
+        if self._selected_id is None:
+            messagebox.showinfo("Eliminar", "Selecciona un usuario primero.")
+            return
+
+        if not messagebox.askyesno(
+                "Confirmar eliminación",
+                "¿Seguro que deseas eliminar este usuario?",
+        ):
+            return
+
+        try:
+            delete_user(self._selected_id)
+        except Exception as e:
+            messagebox.showerror("Error en BD", f"No se pudo eliminar el usuario:\n{e}")
+            return
+
+        self._load_data()

@@ -56,6 +56,190 @@ La solución al problema que nos dio el profesor basicamente crear una aplicaci�
   - Capa de interfaz [UI_WIDGETS.PY](ui_widgets.py) y [VIEW_*.PY](views_usuarios.py)
   - Capa Logica [Main](main.py)
   - capa de datos [DB_UTILS.py](db_utils.py) y [DB](InventarioBD_2.db)
-  
-+Decisiones Propio:
-  
+
++ Decisiones Propias:
+    - No ventanas , Todo en una misma ventana
+    - Vista usuario , modificar usuarios , roles y crear nuevo usuarios
+    - Buen diseño
+
+# TECNOLOGIA
+
+Para este proyecto usé tecnologías sencillas pero muy útiles para alguien que va empezando:
+
+- **Lenguaje:** Python 3.x
+- **Interfaz gráfica:**
+    - `tkinter`
+    - `customtkinter` para darle un estilo más moderno (dark mode, botones bonitos, etc.)
+- **Base de datos:** `SQLite` (módulo `sqlite3` de Python)
+- **Encriptación de contraseñas:** `hashlib` (SHA-256 + salt)
+- **Empaquetado a .exe:** `PyInstaller` usando el archivo `InventarioUNISON.spec`
+
+### Estructura de carpetas y archivos principales
+
+- `main.py` → punto de entrada de la aplicación.
+- `settings.py` → configuración general (ruta de la BD, nombres de roles, etc.).
+- `db_utils.py` → toda la lógica de base de datos:
+    - conexión a SQLite
+    - creación de tablas
+    - manejo de usuarios y almacenes
+    - autenticación y auditoría
+- `ui_widgets.py` → componentes visuales reutilizables (inputs, botones, contenedores).
+- `views_login.py` → pantalla de inicio de sesión.
+- `views_productos.py` → vista para manejar productos.
+- `views_almacenes.py` → vista para manejar almacenes.
+- `views_usuarios.py` → vista para manejar usuarios y roles.
+- `InventarioBD_2.db` → archivo físico de la base de datos.
+- `InventarioUNISON.spec` → archivo de configuración para generar el `.exe`.
+
+Con esto se logra separar bien la lógica de datos, la interfaz y la configuración, para que el código sea más fácil de mantener y entender.
+
+---
+
+# BASE DE DATOS Y SU SEGURIDAD
+
+La base de datos es un archivo `SQLite` (`InventarioBD_2.db`), ideal para proyectos pequeños/medianos porque no requiere servidor externo.
+
+### Tablas principales
+
+- **usuarios**
+    - `id` (PK, autoincremental)
+    - `nombre` (único)
+    - `password_hash`
+    - `salt`
+    - `fecha_hora_ultimo_inicio`
+    - `rol` (`ADMIN`, `PRODUCTOS`, `ALMACENES`, `VISITANTE`)
+
+- **almacenes**
+    - `id` (PK)
+    - `nombre`
+    - `fecha_hora_creacion`
+    - `fecha_hora_ultima_modificacion`
+    - `ultimo_usuario_en_modificar`
+
+- **productos** (estructura básica, puede variar)
+    - `id` (PK)
+    - `nombre`
+    - `cantidad`
+    - `almacen_id` (FK a `almacenes`)
+    - columnas de auditoría similares (quién y cuándo modificó)
+
+### Seguridad de contraseñas
+
+Las contraseñas **no se guardan en texto plano**:
+
+1. Cuando se registra o actualiza un usuario, se genera un `salt` aleatorio.
+2. Se calcula un `hash` con `SHA-256` usando ese `salt` + contraseña.
+3. En la BD solo se almacena:
+    - `salt`
+    - `password_hash`
+4. En el login, se vuelve a calcular el hash y se compara.
+
+Así, aunque alguien abra el archivo `.db`, no puede ver las contraseñas reales.
+
+### Control de roles
+
+Los roles están definidos en `settings.py`:
+
+- `ADMIN`
+- `PRODUCTOS`
+- `ALMACENES`
+- `VISITANTE`
+
+Cada uno tiene distintos permisos dentro de la interfaz. De esta forma, no cualquiera puede borrar o modificar todo.
+
+---
+
+# Funcionalidad por vista
+
+Aquí explico qué hace cada pantalla principal.
+
+### 1. Login (`views_login.py`)
+
+- Pantalla inicial de la app.
+- Campos:
+    - Usuario
+    - Contraseña
+- El login es **sensible a mayúsculas/minúsculas**:
+    - Si en la BD el usuario es `ADMIN`, no funciona `admin`.
+- Al iniciar sesión:
+    - Se valida usuario y contraseña.
+    - Se actualiza `fecha_hora_ultimo_inicio` en la BD.
+    - Se abre la ventana principal con el rol adecuado.
+
+### 2. Vista principal / navegación
+
+- Una sola ventana para todo (por restricción del proyecto).
+- Desde aquí se puede cambiar de módulo:
+    - Productos
+    - Almacenes
+    - Usuarios (solo admin)
+- Cada cambio de sección reutiliza el mismo contenedor, no se abren ventanas nuevas.
+
+### 3. Vista de Productos (`views_productos.py`)
+
+- Listado de productos con tabla.
+- Funciones principales:
+    - Agregar producto
+    - Editar producto
+    - Eliminar producto
+    - Filtrar por nombre / almacén, etc.
+- Cada operación impacta directamente en la BD.
+- Opcionalmente se muestran columnas de auditoría (quién y cuándo modificó por última vez).
+
+### 4. Vista de Almacenes (`views_almacenes.py`)
+
+- Lista todos los almacenes registrados.
+- Acciones:
+    - Crear nuevo almacén
+    - Renombrar almacén
+    - Eliminar almacén
+- Incluye:
+    - `fecha_hora_creacion`
+    - `fecha_hora_ultima_modificacion`
+    - `ultimo_usuario_en_modificar`
+
+### 5. Vista de Usuarios (`views_usuarios.py`)
+
+- Disponible solo para el rol `ADMIN`.
+- Permite:
+    - Crear usuarios nuevos con rol asignado.
+    - Cambiar contraseña.
+    - Cambiar rol.
+    - Eliminar usuarios.
+- Sirve para administrar quién puede entrar al sistema y qué puede hacer.
+
+---
+
+# USO DE IA EN EL DESAROLLO
+
+Durante el desarrollo utilicé herramientas de IA (como ChatGPT) para:
+
+- Diseñar y corregir la estructura de la base de datos.
+- Implementar el sistema de:
+    - Hash de contraseñas con `salt`.
+    - Auditoría automática de cambios.
+- Resolver errores de imports, rutas y nombres de funciones.
+- Mejorar la organización del proyecto en capas:
+    - interfaz (`views_*.py`, `ui_widgets.py`)
+    - lógica (`main.py`)
+    - datos (`db_utils.py`)
+- Redactar y pulir este README y algunos comentarios en el código.
+
+La IA se usó como apoyo, pero todas las pruebas, decisiones finales y ajustes se hicieron manualmente para asegurar que el proyecto cumpla con las restricciones de la materia.
+
+---
+
+# PASOS Y ALGUNOS TIPS
+
+### Requisitos previos
+
+- Python 3.x instalado.
+- Paquetes necesarios:
+    - `customtkinter`
+    - (opcional) cualquier otro módulo extra que uses en el proyecto.
+
+Puedes instalarlos con:
+
+```bash
+pip install customtkinter
+

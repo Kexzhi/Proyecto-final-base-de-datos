@@ -1,175 +1,153 @@
-# ==========================================
 # views_login.py
-# Vista de inicio de sesión (Login)
-# ==========================================
+# -----------------------------------------
+# Vista de inicio de sesión:
+# - tarjeta centrada
+# - logo grande
+# - validación contra la BD
+# -----------------------------------------
 
 import customtkinter as ctk
 from tkinter import messagebox
 
 from settings import (
-    COLOR_AZUL, COLOR_DORADO, COLOR_DORADO_OSCURO,
-    BTN_RADIUS, FONT_UI
+    COLOR_AZUL,
+    COLOR_DORADO,
+    COLOR_DORADO_OSCURO,
+    BTN_RADIUS,
+    FONT_UI,
 )
-from db_utils import authenticate
 from ui_widgets import load_logo
+from db_utils import authenticate_user
 
 
 class LoginView(ctk.CTkFrame):
     """
-    Vista de Login.
-    Llama a on_ok(usuario, rol) cuando el inicio de sesión es correcto.
+    Pantalla de login.
+    Recibe un callback on_ok(usuario, rol) que se llama sólo si el login es correcto.
     """
 
     def __init__(self, parent, on_ok):
-        # Fondo general azul, pero el contenido será mostly blanco
         super().__init__(parent, fg_color=COLOR_AZUL)
         self.on_ok = on_ok
 
-        # ---------- Tarjeta central ----------
+        # ---------- Tarjeta blanca centrada ----------
         card = ctk.CTkFrame(
             self,
             fg_color="white",
-            corner_radius=20,
-            width=520,
-            height=420
+            corner_radius=18,
+            width=420,
+            height=420,
         )
         card.place(relx=0.5, rely=0.5, anchor="center")
 
-        card.grid_rowconfigure(1, weight=1)
-        card.grid_columnconfigure(0, weight=1)
+        inner = ctk.CTkFrame(card, fg_color="white")
+        inner.pack(expand=True, fill="both", padx=32, pady=24)
 
-        # ---------- Zona superior: logo + títulos ----------
-        header = ctk.CTkFrame(card, fg_color="white", corner_radius=20)
-        header.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, 0))
-
-        header.grid_columnconfigure(0, weight=0)
-        header.grid_columnconfigure(1, weight=1)
-
-        # Logo más grande
+        # ---------- Logo ----------
         logo = load_logo((110, 110))
         if logo:
-            lbl_logo = ctk.CTkLabel(header, image=logo, text="", fg_color="white")
+            lbl_logo = ctk.CTkLabel(inner, image=logo, text="", fg_color="white")
             lbl_logo.image = logo
-            lbl_logo.grid(row=0, column=0, padx=(24, 12), pady=18)
+            lbl_logo.pack(pady=(0, 8))
 
-        title_frame = ctk.CTkFrame(header, fg_color="white")
-        title_frame.grid(row=0, column=1, sticky="w", padx=(0, 24), pady=18)
+        # ---------- Títulos ----------
+        ctk.CTkLabel(
+            inner,
+            text="Sistema de Inventario",
+            font=("Segoe UI", 18, "bold"),
+            text_color=COLOR_AZUL,
+            fg_color="white",
+        ).pack(pady=(0, 2))
 
         ctk.CTkLabel(
-            title_frame,
-            text="Sistema de Inventario",
-            font=("Segoe UI", 16, "bold"),
-            text_color=COLOR_AZUL,
+            inner,
+            text="Universidad de Sonora",
+            font=("Segoe UI", 12),
+            text_color="#555",
+            fg_color="white",
+        ).pack(pady=(0, 12))
+
+        ctk.CTkLabel(
+            inner,
+            text="Inicio de sesión",
+            font=("Segoe UI", 13, "bold"),
+            text_color="#111",
+            fg_color="white",
+        ).pack(pady=(6, 4), anchor="w")
+
+        # ---------- Campo Usuario ----------
+        user_frame = ctk.CTkFrame(inner, fg_color="white")
+        user_frame.pack(fill="x", pady=(4, 4))
+
+        ctk.CTkLabel(
+            user_frame,
+            text="Usuario",
+            font=("Segoe UI", 10),
+            text_color="#333",
             fg_color="white",
         ).pack(anchor="w")
 
+        self.ent_user = ctk.CTkEntry(
+            user_frame,
+            height=32,
+            corner_radius=BTN_RADIUS,
+            font=FONT_UI,
+        )
+        self.ent_user.pack(fill="x", pady=(2, 4))
+
+        # ---------- Campo Contraseña ----------
+        pass_frame = ctk.CTkFrame(inner, fg_color="white")
+        pass_frame.pack(fill="x", pady=(4, 8))
+
         ctk.CTkLabel(
-            title_frame,
-            text="Universidad de Sonora",
-            font=("Segoe UI", 11),
-            text_color="#555",
-            fg_color="white",
-        ).pack(anchor="w", pady=(2, 0))
-
-        # Línea delgada de color dorado para separar
-        ctk.CTkFrame(
-            card,
-            fg_color=COLOR_DORADO,
-            height=2
-        ).grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 4))
-
-        # ---------- Cuerpo del formulario ----------
-        body = ctk.CTkFrame(card, fg_color="white")
-        body.grid(row=2, column=0, sticky="nsew", padx=26, pady=(10, 18))
-
-        # Título "Inicio de sesión"
-        ctk.CTkLabel(
-            body,
-            text="Inicio de sesión",
-            font=("Segoe UI", 14, "bold"),
+            pass_frame,
+            text="Contraseña",
+            font=("Segoe UI", 10),
             text_color="#333",
             fg_color="white",
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w")
 
-        ctk.CTkLabel(
-            body,
-            text="Ingresa tu usuario y contraseña para acceder al sistema de inventario.",
-            font=("Segoe UI", 10),
-            text_color="#666",
-            fg_color="white",
-            wraplength=420,
-            justify="left",
-        ).pack(anchor="w", pady=(0, 12))
-
-        # Campo usuario
-        ctk.CTkLabel(
-            body, text="Usuario", font=FONT_UI,
-            text_color="#333", fg_color="white"
-        ).pack(anchor="w", pady=(4, 0))
-
-        self.ent_user = ctk.CTkEntry(
-            body,
-            width=380,
+        self.ent_pass = ctk.CTkEntry(
+            pass_frame,
             height=32,
             corner_radius=BTN_RADIUS,
             font=FONT_UI,
+            show="*",
         )
-        self.ent_user.pack(anchor="w", pady=(2, 10))
+        self.ent_pass.pack(fill="x", pady=(2, 4))
 
-        # Campo contraseña
-        ctk.CTkLabel(
-            body, text="Contraseña", font=FONT_UI,
-            text_color="#333", fg_color="white"
-        ).pack(anchor="w", pady=(4, 0))
-
-        self.ent_pwd = ctk.CTkEntry(
-            body,
-            width=380,
-            height=32,
-            corner_radius=BTN_RADIUS,
-            font=FONT_UI,
-            show="•",
-        )
-        self.ent_pwd.pack(anchor="w", pady=(2, 16))
-
-        # Botón iniciar sesión
-        btn_login = ctk.CTkButton(
-            body,
+        # ---------- Botón Iniciar sesión ----------
+        self.btn_login = ctk.CTkButton(
+            inner,
             text="Iniciar sesión",
+            command=self._do_login,
             corner_radius=BTN_RADIUS,
             fg_color=COLOR_DORADO,
             hover_color=COLOR_DORADO_OSCURO,
             text_color="black",
-            width=190,
-            height=34,
-            command=self.try_login,
+            height=36,
         )
-        btn_login.pack(anchor="center", pady=(4, 0))
+        self.btn_login.pack(fill="x", pady=(16, 4))
 
-        # ⚠️ Importante: ya NO hay texto abajo con pistas de usuarios
+        # Enter para aceptar
+        self.ent_pass.bind("<Return>", lambda _e: self._do_login())
+        self.ent_user.bind("<Return>", lambda _e: self._do_login())
 
-        # ENTER en contraseña también hace login
-        self.ent_pwd.bind("<Return>", lambda e: self.try_login())
-
-        # Foco inicial en usuario
+        # focus inicial en usuario
         self.ent_user.focus_set()
 
-    # --------------------------------------
-    # Lógica de login
-    # --------------------------------------
-    def try_login(self):
-        """Lee los campos, valida y llama a authenticate()."""
-        user = (self.ent_user.get() or "").strip()
-        pwd = (self.ent_pwd.get() or "").strip()
+    # ---------- Lógica de login ----------
 
-        if not user or not pwd:
-            messagebox.showwarning("Validación", "Ingresa usuario y contraseña.")
-            return
+    def _do_login(self):
+        """Lee usuario/contraseña, pregunta a la BD y llama on_ok si es correcto."""
+        user = self.ent_user.get()
+        pwd = self.ent_pass.get()
 
-        ok = authenticate(user, pwd)
+        ok, nombre, rol, msg = authenticate_user(user, pwd)
+
         if not ok:
-            messagebox.showerror("Acceso", "Usuario o contraseña incorrectos.")
+            messagebox.showerror("Acceso", msg)
             return
 
-        _uid, nombre, rol = ok
-        self.on_ok(nombre, rol)
+        if callable(self.on_ok):
+            self.on_ok(nombre, rol)
