@@ -154,12 +154,16 @@ Cada uno tiene distintos permisos dentro de la interfaz. De esta forma, no cualq
 Aquí explico qué hace cada pantalla principal.
 
 ### 1. Login (`views_login.py`)
+<img src="./IMAGENES GITHUB/INICIO DE SESION.png" width="600">
 
 - Pantalla inicial de la app.
 - Campos:
     - Usuario
     - Contraseña
 - El login es **sensible a mayúsculas/minúsculas**:
+
+<img src="./IMAGENES GITHUB/MAL INICIO DE SESION.png" width="600">
+
     - Si en la BD el usuario es `ADMIN`, no funciona `admin`.
 - Al iniciar sesión:
     - Se valida usuario y contraseña.
@@ -167,6 +171,7 @@ Aquí explico qué hace cada pantalla principal.
     - Se abre la ventana principal con el rol adecuado.
 
 ### 2. Vista principal / navegación
+<img src="./IMAGENES GITHUB/INICIO DESPUES DE INICIAR.png" width="600">
 
 - Una sola ventana para todo (por restricción del proyecto).
 - Desde aquí se puede cambiar de módulo:
@@ -176,17 +181,24 @@ Aquí explico qué hace cada pantalla principal.
 - Cada cambio de sección reutiliza el mismo contenedor, no se abren ventanas nuevas.
 
 ### 3. Vista de Productos (`views_productos.py`)
+<img src="./IMAGENES GITHUB/PRODUCTOS.png" width="600">
 
 - Listado de productos con tabla.
 - Funciones principales:
     - Agregar producto
+      <img src="./IMAGENES GITHUB/AGREGAR.png" width="600">
+
     - Editar producto
     - Eliminar producto
     - Filtrar por nombre / almacén, etc.
+
+<img src="./IMAGENES GITHUB/FILTROS.png" width="200">
+
 - Cada operación impacta directamente en la BD.
 - Opcionalmente se muestran columnas de auditoría (quién y cuándo modificó por última vez).
 
 ### 4. Vista de Almacenes (`views_almacenes.py`)
+<img src="./IMAGENES GITHUB/ALMACENES 2.png" width="600">
 
 - Lista todos los almacenes registrados.
 - Acciones:
@@ -199,6 +211,8 @@ Aquí explico qué hace cada pantalla principal.
     - `ultimo_usuario_en_modificar`
 
 ### 5. Vista de Usuarios (`views_usuarios.py`)
+
+<img src="./IMAGENES GITHUB/ULTIMA HORA DE INICIO DE SESION.png" width="600">
 
 - Disponible solo para el rol `ADMIN`.
 - Permite:
@@ -223,7 +237,7 @@ Durante el desarrollo utilicé herramientas de IA (como ChatGPT) para:
     - interfaz (`views_*.py`, `ui_widgets.py`)
     - lógica (`main.py`)
     - datos (`db_utils.py`)
-- Redactar y pulir este README y algunos comentarios en el código.
+- algunos comentarios en el código.
 
 La IA se usó como apoyo, pero todas las pruebas, decisiones finales y ajustes se hicieron manualmente para asegurar que el proyecto cumpla con las restricciones de la materia.
 
@@ -236,7 +250,6 @@ La IA se usó como apoyo, pero todas las pruebas, decisiones finales y ajustes s
 - Python 3.x instalado.
 - Paquetes necesarios:
     - `customtkinter`
-    - (opcional) cualquier otro módulo extra que uses en el proyecto.
 
 Puedes instalarlos con:
 
