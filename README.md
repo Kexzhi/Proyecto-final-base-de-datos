@@ -186,6 +186,7 @@ Aquí explico qué hace cada pantalla principal.
 - Listado de productos con tabla.
 - Funciones principales:
     - Agregar producto
+
       <img src="./IMAGENES GITHUB/AGREGAR.png" width="600">
 
     - Editar producto
